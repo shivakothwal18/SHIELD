@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHIELD - Industrial Bird Control System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #22c55e;
+            --primary-glow: rgba(34, 197, 94, 0.3);
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --rust: #92400e;
+            --bg: #0a0a0a;
+            --surface: rgba(20, 20, 20, 0.92);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #0a0a0a;
+            font-family: 'Space Grotesk', sans-serif;
+            color: var(--text);
+        }
+
+        canvas { display: block; }
+
+        /* Scanline effect for realism */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.15),
+                rgba(0, 0, 0, 0.15) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.3;
+        }
+
+        /* Vignette effect */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.8) 100%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: clamp(20px, 5vw, 50px);
+            z-index: 2;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: auto;
+            gap: 20px;
+        }
+
+        .logo-area {
+            background: linear-gradient(135deg, rgba(20, 20, 20, 0.95), rgba(30, 30, 30, 0.9));
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            padding: 20px 30px;
+            border-radius: 4px;
+            box-shadow: 
+                0 10px 40px rgba(0, 0, 0, 0.8),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+        }
+
+        .logo-area h1 {
+            font-size: clamp(24px, 4vw, 36px);
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: 6px;
+            text-shadow: 0 0 20px var(--primary-glow), 0 2px 4px rgba(0,0,0,0.8);
+            margin-bottom: 5px;
+        }
+
+        .logo-area p {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            font-weight: 300;
+            opacity: 0.8;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            background: linear-gradient(135deg, rgba(20, 20, 20, 0.95), rgba(30, 30, 30, 0.9));
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            padding: 15px 25px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            backdrop-filter: blur(20px);
+            box-shadow: 
+                0 10px 40px rgba(0, 0, 0, 0.8),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+            box-shadow: 0 0 15px var(--primary), 0 0 30px var(--primary-glow);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.6; }
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(0, 0, 0, 0.8);
+            overflow: hidden;
+            z-index: 10;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #16a34a);
+            transition: width 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            box-shadow: 0 0 20px var(--primary-glow);
+            position: relative;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 40px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        /* Content Card */
+        .content-wrapper {
+            display: flex;
+            gap: 25px;
+            align-items: flex-end;
+            pointer-events: auto;
+            max-width: 1600px;
+        }
+
+        .content-card {
+            background: linear-gradient(135deg, rgba(20, 20, 20, 0.95), rgba(30, 30, 30, 0.92));
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-left: 4px solid var(--primary);
+            padding: clamp(25px, 4vw, 45px);
+            max-width: 650px;
+            backdrop-filter: blur(30px);
+            box-shadow: 
+                0 20px 80px rgba(0, 0, 0, 0.9),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05),
+                0 0 0 1px rgba(0, 0, 0, 0.5);
+            transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .content-card.hidden {
+            transform: translateX(-100px);
+            opacity: 0;
+        }
+
+        .content-card.danger {
+            border-left-color: var(--danger);
+            box-shadow: 
+                0 20px 80px rgba(0, 0, 0, 0.9),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05),
+                -5px 0 20px rgba(239, 68, 68, 0.15);
+        }
+
+        .content-card.warning {
+            border-left-color: var(--warning);
+            box-shadow: 
+                0 20px 80px rgba(0, 0, 0, 0.9),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05),
+                -5px 0 20px rgba(245, 158, 11, 0.15);
+        }
+
+        .slide-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--primary);
+            margin-bottom: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.9;
+        }
+
+        .content-card h2 {
+            font-size: clamp(22px, 4vw, 38px);
+            margin: 0 0 20px 0;
+            color: var(--text);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            line-height: 1.2;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .content-card p {
+            font-size: clamp(14px, 2vw, 17px);
+            line-height: 1.8;
+            color: #cbd5e1;
+            margin-bottom: 25px;
+            font-weight: 300;
+        }
+
+        .problem-highlight {
+            background: rgba(239, 68, 68, 0.08);
+            border-left: 3px solid var(--danger);
+            padding: 18px;
+            margin: 20px 0;
+            font-size: 14px;
+            color: #fca5a5;
+            box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.1);
+        }
+
+        /* Data Grid */
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        .data-pill {
+            background: linear-gradient(135deg, rgba(40, 40, 40, 0.6), rgba(30, 30, 30, 0.8));
+            padding: 18px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.3s ease;
+            position: relative;
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .data-pill::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .data-pill:hover {
+            background: linear-gradient(135deg, rgba(50, 50, 50, 0.7), rgba(40, 40, 40, 0.9));
+            border-color: rgba(34, 197, 94, 0.3);
+            transform: translateY(-3px);
+            box-shadow: 
+                0 8px 25px rgba(0, 0, 0, 0.7),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .data-pill:hover::before {
+            opacity: 1;
+        }
+
+        .data-pill.danger {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: linear-gradient(135deg, rgba(60, 30, 30, 0.6), rgba(50, 20, 20, 0.8));
+        }
+
+        .data-pill.danger::before {
+            background: linear-gradient(90deg, transparent, var(--danger), transparent);
+        }
+
+        .data-pill.warning {
+            border-color: rgba(245, 158, 11, 0.4);
+            background: linear-gradient(135deg, rgba(60, 50, 30, 0.6), rgba(50, 40, 20, 0.8));
+        }
+
+        .data-pill.warning::before {
+            background: linear-gradient(90deg, transparent, var(--warning), transparent);
+        }
+
+        .data-pill.rust {
+            border-color: rgba(146, 64, 14, 0.4);
+            background: linear-gradient(135deg, rgba(50, 35, 25, 0.6), rgba(40, 25, 15, 0.8));
+        }
+
+        .data-pill label {
+            display: block;
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+            font-weight: 400;
+        }
+
+        .data-pill span {
+            font-weight: 700;
+            font-size: clamp(15px, 2vw, 19px);
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Problem Visualization */
+        .problem-visual {
+            background: linear-gradient(135deg, rgba(60, 30, 30, 0.5), rgba(50, 20, 20, 0.7));
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 6px;
+            padding: 22px;
+            margin-top: 20px;
+            box-shadow: 
+                0 4px 20px rgba(239, 68, 68, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .problem-visual h4 {
+            font-size: 13px;
+            color: var(--danger);
+            margin-bottom: 18px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        .problem-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.5;
+        }
+
+        .problem-icon {
+            width: 22px;
+            height: 22px;
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            flex-shrink: 0;
+            box-shadow: 0 2px 10px rgba(239, 68, 68, 0.4);
+        }
+
+        /* Navigation */
+        .nav-controls {
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+            align-self: flex-end;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .nav-hint {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            background: rgba(20, 20, 20, 0.8);
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-hint kbd {
+            background: linear-gradient(135deg, rgba(60, 60, 60, 0.8), rgba(40, 40, 40, 0.9));
+            padding: 4px 10px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0 4px;
+            box-shadow: 
+                0 2px 5px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, rgba(30, 40, 30, 0.8), rgba(20, 30, 20, 0.9));
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 16px 36px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: radial-gradient(circle, var(--primary), #16a34a);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        button:hover::before {
+            width: 400px;
+            height: 400px;
+        }
+
+        button:hover {
+            color: #000;
+            border-color: var(--primary);
+            box-shadow: 
+                0 6px 25px rgba(34, 197, 94, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button span {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Loading Screen */
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.8s ease;
+        }
+
+        .loader {
+            width: 70px;
+            height: 70px;
+            border: 4px solid rgba(34, 197, 94, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 30px;
+            box-shadow: 
+                0 0 40px var(--primary-glow),
+                inset 0 0 20px rgba(34, 197, 94, 0.1);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 4px;
+            font-size: 13px;
+            color: var(--primary);
+            animation: loadingPulse 2s ease-in-out infinite;
+            text-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        @keyframes loadingPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .content-wrapper {
+                flex-direction: column;
+            }
+
+            .nav-controls {
+                width: 100%;
+                align-items: stretch;
+            }
+
+            .nav-buttons {
+                width: 100%;
+            }
+
+            button {
+                flex: 1;
+                padding: 14px 24px;
+            }
+
+            .nav-hint {
+                text-align: center;
+                font-size: 9px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="progress-container">
+    <div class="progress-bar" id="progressBar"></div>
+</div>
+
+<div id="loading-screen">
+    <div class="loader"></div>
+    <div class="loading-text">LOADING FACILITY MODEL...</div>
+</div>
+
+<div id="ui-layer">
+    <div class="header">
+        <div class="logo-area">
+            <h1>SHIELD</h1>
+            <p>Industrial Bird Control & Safety System</p>
+        </div>
+        <div class="status-badge">
+            <div class="status-dot"></div>
+            <span id="systemStatus">ASSESSMENT MODE</span>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <div id="content" class="content-card">
+            <div class="slide-number" id="slideNumber">ISSUE 01/06</div>
+            <h2 id="slide-title">The Problem</h2>
+            <div id="slide-body">
+                <p id="slide-text">Loading...</p>
+            </div>
+            <div id="problem-area"></div>
+            <div id="data-area" class="data-grid"></div>
+        </div>
+    </div>
+
+    <div class="nav-controls">
+        <div class="nav-hint">Use <kbd>←</kbd> <kbd>→</kbd> arrow keys to navigate</div>
+        <div class="nav-buttons">
+            <button id="prevBtn"><span>← Previous</span></button>
+            <button id="nextBtn"><span>Next Issue →</span></button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- SLIDE CONTENT DATA ---
+    const slides = [
+        {
+            title: "The Hidden Threat",
+            text: "Your factory floor looks clean. But look up. Birds nest in the rafters, attracted by warmth from machinery running 24/7. They're directly above your workers, equipment, and products. What you can't see is accumulating overhead.",
+            camera: { x: 20, y: 12, z: 35 },
+            lookAt: { x: 0, y: 15, z: 0 },
+            problems: [
+                "Bird nests in steel rafters",
+                "Droppings on machinery below",
+                "Workers unaware of overhead hazards",
+                "Daily contamination buildup"
+            ],
+            data: [
+                { label: "Birds Roosting", value: "25-50", type: "danger" },
+                { label: "Nests Active", value: "8-12", type: "danger" },
+                { label: "Daily Droppings", value: "~2kg", type: "warning" },
+                { label: "Last Inspection", value: "3 months", type: "rust" }
+            ],
+            type: "danger"
+        },
+        {
+            title: "Health Hazards",
+            text: "Bird droppings aren't just messy—they're biohazards. When dried droppings crumble, workers breathe in fungal spores and bacteria. The University of Texas documented three serious diseases that can hospitalize workers: Histoplasmosis attacks lungs, Salmonellosis causes severe illness, Candidiasis infects respiratory systems.",
+            camera: { x: -5, y: 25, z: 15 },
+            lookAt: { x: 0, y: 20, z: 0 },
+            problems: [
+                "Airborne fungal spores from dried droppings",
+                "Workers breathing contaminated air daily",
+                "Symptoms: fever, respiratory distress, fatigue",
+                "OSHA violations and liability exposure"
+            ],
+            data: [
+                { label: "Histoplasmosis", value: "Lung Infection", type: "danger" },
+                { label: "Salmonellosis", value: "Bacterial", type: "danger" },
+                { label: "Candidiasis", value: "Respiratory", type: "danger" },
+                { label: "ER Visits/Year", value: "15-30", type: "danger" }
+            ],
+            type: "danger"
+        },
+        {
+            title: "Equipment Damage",
+            text: "Bird droppings are highly acidic (pH 3-4.5). They corrode metal surfaces, destroy paint, and eat through protective coatings. Droppings block ventilation systems, jam moving parts, and contaminate products. A single season can cause thousands in damage.",
+            camera: { x: 15, y: 8, z: 20 },
+            lookAt: { x: 0, y: 5, z: 0 },
+            problems: [
+                "Acidic droppings corrode steel structures",
+                "Ventilation systems clogged with nesting material",
+                "Motors and conveyors jammed by debris",
+                "Product contamination and waste"
+            ],
+            data: [
+                { label: "Corrosion Cost", value: "$48k", type: "rust" },
+                { label: "Cleaning (Annual)", value: "$8-15k", type: "warning" },
+                { label: "Equipment Repair", value: "$12-25k", type: "rust" },
+                { label: "Downtime Hours", value: "40-80", type: "danger" }
+            ],
+            type: "danger"
+        },
+        {
+            title: "Current Solutions Fail",
+            text: "Your competitors use netting, spikes, or chemical sprays. Here's why they don't work: Netting sags and creates perches. Birds nest on top. Spikes are expensive and birds adapt within weeks. Chemical repellents are toxic to workers, fade quickly, and harm the environment. None of these are monitored—you're blind to whether they're working.",
+            camera: { x: 0, y: 30, z: -20 },
+            lookAt: { x: 0, y: 25, z: 0 },
+            problems: [
+                "Static solutions with no monitoring",
+                "Birds adapt and find new entry points",
+                "Maintenance costs spiral annually",
+                "No data on effectiveness"
+            ],
+            data: [
+                { label: "Netting Failure Rate", value: "65%", type: "danger" },
+                { label: "Spike Effectiveness", value: "3-6 months", type: "warning" },
+                { label: "Chemical Toxicity", value: "High", type: "danger" },
+                { label: "Annual Maintenance", value: "$10-20k", type: "rust" }
+            ],
+            type: "warning"
+        },
+        {
+            title: "SHIELD Active Defense",
+            text: "SHIELD doesn't wait for birds to nest. It detects them in real-time when they approach, then deters them immediately with safe, targeted ultrasonic pulses. Birds learn your facility is protected and stop returning. 24/7 monitoring means you see exactly what's happening overhead—no more guessing.",
+            camera: { x: 0, y: 32, z: 18 },
+            lookAt: { x: 0, y: 28, z: 0 },
+            problems: [
+                "AI-powered detection identifies birds instantly",
+                "Ultrasonic deterrence activates in < 2 seconds",
+                "Birds conditioned to avoid facility permanently",
+                "Real-time dashboard shows all activity"
+            ],
+            data: [
+                { label: "Detection Speed", value: "< 2 sec", type: "normal" },
+                { label: "Coverage Radius", value: "60 meters", type: "normal" },
+                { label: "Success Rate", value: "99.2%", type: "normal" },
+                { label: "Bird Returns", value: "Near Zero", type: "normal" }
+            ],
+            type: "normal"
+        },
+        {
+            title: "Real Results",
+            text: "After SHIELD installation: Zero bird nests within 30 days. Worker safety incidents drop to zero. Equipment runs clean—no more corrosion or contamination. You pass every inspection. ROI in 8-14 months through eliminated damage, reduced cleaning, and zero downtime. Most importantly: your workers go home healthy.",
+            camera: { x: 40, y: 15, z: 10 },
+            lookAt: { x: 0, y: 12, z: 0 },
+            problems: [
+                "100% elimination of overhead bird activity",
+                "Zero health & safety incidents reported",
+                "No equipment corrosion or contamination",
+                "Full regulatory compliance maintained"
+            ],
+            data: [
+                { label: "Bird Elimination", value: "100%", type: "normal" },
+                { label: "Safety Incidents", value: "0", type: "normal" },
+                { label: "ROI Timeline", value: "8-14 mo", type: "normal" },
+                { label: "Compliance", value: "100%", type: "normal" }
+            ],
+            type: "normal"
+        }
+    ];
+
+    let currentSlide = 0;
+    let scene, camera, renderer, factoryGroup;
+    let mouseX = 0, mouseY = 0;
+
+    // --- INITIALIZATION ---
+    window.onload = function() {
+        init();
+        animate();
+        updateUI();
+        setTimeout(() => {
+            const loadingScreen = document.getElementById('loading-screen');
+            loadingScreen.style.opacity = '0';
+            setTimeout(() => loadingScreen.style.display = 'none', 800);
+        }, 2200);
+    };
+
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+        scene.fog = new THREE.FogExp2(0x1a1a1a, 0.012);
+
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(20, 12, 35);
+
+        renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            alpha: false 
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        document.body.appendChild(renderer.domElement);
+
+        // Realistic Industrial Lighting
+        const ambient = new THREE.AmbientLight(0x2a2a2a, 1.8);
+        scene.add(ambient);
+
+        // Harsh overhead industrial lights with halos
+        const createIndustrialLight = (x, y, z, color, intensity) => {
+            const light = new THREE.PointLight(color, intensity, 100);
+            light.position.set(x, y, z);
+            light.castShadow = true;
+            light.shadow.mapSize.width = 1024;
+            light.shadow.mapSize.height = 1024;
+            light.shadow.camera.near = 0.5;
+            light.shadow.camera.far = 100;
+            scene.add(light);
+
+            // Light halo effect
+            const glowGeo = new THREE.SphereGeometry(2, 16, 16);
+            const glowMat = new THREE.MeshBasicMaterial({ 
+                color: color,
+                transparent: true,
+                opacity: 0.15
+            });
+            const glow = new THREE.Mesh(glowGeo, glowMat);
+            glow.position.set(x, y, z);
+            scene.add(glow);
+        };
+
+        createIndustrialLight(-30, 32, -30, 0xffa500, 2.5);
+        createIndustrialLight(30, 32, 30, 0xffa500, 2.5);
+        createIndustrialLight(-30, 32, 30, 0xff9500, 2.0);
+        createIndustrialLight(30, 32, -30, 0xff9500, 2.0);
+        createIndustrialLight(0, 32, 0, 0xffaa00, 2.2);
+
+        // Rim lighting for depth
+        const rimLight = new THREE.DirectionalLight(0x4444ff, 0.5);
+        rimLight.position.set(-50, 20, -50);
+        scene.add(rimLight);
+
+        createFactory();
+
+        window.addEventListener('resize', onWindowResize);
+        document.addEventListener('mousemove', (e) => {
+            mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+            mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+        });
+
+        document.getElementById('nextBtn').addEventListener('click', () => changeSlide(1));
+        document.getElementById('prevBtn').addEventListener('click', () => changeSlide(-1));
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                changeSlide(1);
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                changeSlide(-1);
+            }
+        });
+    }
+
+    function createFactory() {
+        factoryGroup = new THREE.Group();
+
+        // Textured Concrete Floor
+        const floorGeo = new THREE.PlaneGeometry(220, 220, 100, 100);
+        const floorMat = new THREE.MeshStandardMaterial({ 
+            color: 0x3a3a3a,
+            roughness: 0.95,
+            metalness: 0.05
+        });
+        
+        // Add vertex noise for realistic concrete texture
+        const positions = floorGeo.attributes.position.array;
+        for (let i = 0; i < positions.length; i += 3) {
+            positions[i + 2] += Math.random() * 0.2;
+        }
+        floorGeo.computeVertexNormals();
+        
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        factoryGroup.add(floor);
+
+        // Oil stains and floor marks
+        for (let i = 0; i < 35; i++) {
+            const size = Math.random() * 3 + 1;
+            const stain = new THREE.Mesh(
+                new THREE.CircleGeometry(size, 16),
+                new THREE.MeshBasicMaterial({ 
+                    color: i < 20 ? 0x1a1a1a : 0x2a2a2a,
+                    transparent: true,
+                    opacity: 0.5
+                })
+            );
+            stain.rotation.x = -Math.PI / 2;
+            stain.position.set(
+                (Math.random() - 0.5) * 180,
+                0.15,
+                (Math.random() - 0.5) * 180
+            );
+            factoryGroup.add(stain);
+        }
+
+        // Realistic Industrial Machinery with details
+        const machineConfigs = [
+            { w: 16, h: 13, d: 11, color: 0x4a4a4a },
+            { w: 13, h: 11, d: 13, color: 0x555555 },
+            { w: 19, h: 9, d: 9, color: 0x454545 },
+            { w: 11, h: 16, d: 11, color: 0x505050 }
+        ];
+
+        for (let x = -55; x <= 55; x += 30) {
+            for (let z = -55; z <= 55; z += 30) {
+                if (Math.abs(x) < 22 && Math.abs(z) < 22) continue;
+
+                const config = machineConfigs[Math.floor(Math.random() * machineConfigs.length)];
+                const machineGroup = new THREE.Group();
+                
+                // Main machine body with realistic material
+                const machine = new THREE.Mesh(
+                    new THREE.BoxGeometry(config.w, config.h, config.d),
+                    new THREE.MeshStandardMaterial({ 
+                        color: config.color,
+                        roughness: 0.75,
+                        metalness: 0.4
+                    })
+                );
+                machine.castShadow = true;
+                machine.receiveShadow = true;
+                machineGroup.add(machine);
+
+                // Wear and tear details
+                const wearSpots = 3 + Math.floor(Math.random() * 3);
+                for (let w = 0; w < wearSpots; w++) {
+                    const wear = new THREE.Mesh(
+                        new THREE.BoxGeometry(
+                            Math.random() * 2 + 1,
+                            config.h + 0.1,
+                            Math.random() * 2 + 1
+                        ),
+                        new THREE.MeshStandardMaterial({ 
+                            color: 0x3a3a3a,
+                            roughness: 1,
+                            metalness: 0.2
+                        })
+                    );
+                    wear.position.set(
+                        (Math.random() - 0.5) * config.w * 0.8,
+                        0,
+                        (Math.random() - 0.5) * config.d * 0.8
+                    );
+                    machineGroup.add(wear);
+                }
+
+                // Control panel with realistic details
+                const panelGroup = new THREE.Group();
+                const panel = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.5, 4, 1.2),
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0x2a2a2a,
+                        roughness: 0.6,
+                        metalness: 0.5
+                    })
+                );
+                panelGroup.add(panel);
+
+                // Panel lights
+                for (let p = 0; p < 3; p++) {
+                    const indicator = new THREE.Mesh(
+                        new THREE.CircleGeometry(0.15, 16),
+                        new THREE.MeshBasicMaterial({ 
+                            color: Math.random() > 0.5 ? 0x00ff00 : 0xff0000
+                        })
+                    );
+                    indicator.position.set(
+                        -0.3 + p * 0.3,
+                        1.2,
+                        0.61
+                    );
+                    panelGroup.add(indicator);
+                }
+
+                panelGroup.position.set(config.w / 2 - 1.5, config.h / 2 - 2, 0);
+                machineGroup.add(panelGroup);
+
+                // Safety striping
+                const stripe = new THREE.Mesh(
+                    new THREE.BoxGeometry(config.w + 0.3, 1.2, config.d + 0.3),
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0xffaa00,
+                        roughness: 0.7,
+                        metalness: 0.3
+                    })
+                );
+                stripe.position.y = -config.h / 2 + 0.6;
+                machineGroup.add(stripe);
+
+                // Black stripe pattern
+                for (let s = 0; s < 4; s++) {
+                    const blackStripe = new THREE.Mesh(
+                        new THREE.BoxGeometry((config.w + 0.3) / 4, 1.25, config.d + 0.35),
+                        new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+                    );
+                    blackStripe.position.set(
+                        -config.w / 2 + (s * 2 + 1) * config.w / 8,
+                        -config.h / 2 + 0.6,
+                        0
+                    );
+                    machineGroup.add(blackStripe);
+                }
+
+                machineGroup.position.set(x, config.h / 2, z);
+                factoryGroup.add(machineGroup);
+
+                // Realistic bird droppings
+                if (currentSlide < 4) {
+                    const droppingCount = 5 + Math.floor(Math.random() * 5);
+                    for (let i = 0; i < droppingCount; i++) {
+                        const dropping = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.35, 8, 8),
+                            new THREE.MeshStandardMaterial({ 
+                                color: 0xf5f5f5,
+                                roughness: 0.95
+                            })
+                        );
+                        dropping.position.set(
+                            x + (Math.random() - 0.5) * config.w * 0.8,
+                            config.h / 2 + 0.35,
+                            z + (Math.random() - 0.5) * config.d * 0.8
+                        );
+                        dropping.scale.set(1, 0.25, 1);
+                        dropping.castShadow = true;
+                        dropping.name = "dropping";
+                        factoryGroup.add(dropping);
+                    }
+                }
+
+                // Heat distortion effect
+                const heat = new THREE.Mesh(
+                    new THREE.SphereGeometry(config.w / 1.4, 16, 16),
+                    new THREE.MeshBasicMaterial({ 
+                        color: 0xff4400,
+                        transparent: true,
+                        opacity: 0.04
+                    })
+                );
+                heat.position.copy(machineGroup.position);
+                heat.position.y += 3;
+                heat.userData = { baseY: heat.position.y, offset: Math.random() * 10 };
+                heat.name = "heat";
+                factoryGroup.add(heat);
+            }
+        }
+
+        // Realistic Steel I-Beam Rafters
+        for (let i = -90; i <= 90; i += 22) {
+            // Main I-beams with realistic proportions
+            const beamGroup = new THREE.Group();
+            
+            // Top flange
+            const topFlange = new THREE.Mesh(
+                new THREE.BoxGeometry(190, 0.8, 4),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0x3a3a3a,
+                    roughness: 0.85,
+                    metalness: 0.45
+                })
+            );
+            topFlange.position.y = 1.6;
+            beamGroup.add(topFlange);
+
+            // Web
+            const web = new THREE.Mesh(
+                new THREE.BoxGeometry(190, 3, 0.6),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0x353535,
+                    roughness: 0.85,
+                    metalness: 0.45
+                })
+            );
+            beamGroup.add(web);
+
+            // Bottom flange
+            const bottomFlange = new THREE.Mesh(
+                new THREE.BoxGeometry(190, 0.8, 4),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0x3a3a3a,
+                    roughness: 0.85,
+                    metalness: 0.45
+                })
+            );
+            bottomFlange.position.y = -1.6;
+            beamGroup.add(bottomFlange);
+
+            beamGroup.position.set(0, 35, i);
+            beamGroup.castShadow = true;
+            beamGroup.receiveShadow = true;
+            factoryGroup.add(beamGroup);
+
+            // Cross beams
+            if (i % 44 === 0) {
+                const crossGroup = new THREE.Group();
+                
+                const crossTop = new THREE.Mesh(
+                    new THREE.BoxGeometry(4, 0.8, 190),
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0x3a3a3a,
+                        roughness: 0.85,
+                        metalness: 0.45
+                    })
+                );
+                crossTop.position.y = 1.6;
+                crossGroup.add(crossTop);
+
+                const crossWeb = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.6, 3, 190),
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0x353535,
+                        roughness: 0.85,
+                        metalness: 0.45
+                    })
+                );
+                crossGroup.add(crossWeb);
+
+                const crossBottom = new THREE.Mesh(
+                    new THREE.BoxGeometry(4, 0.8, 190),
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0x3a3a3a,
+                        roughness: 0.85,
+                        metalness: 0.45
+                    })
+                );
+                crossBottom.position.y = -1.6;
+                crossGroup.add(crossBottom);
+
+                crossGroup.position.set(i, 35, 0);
+                crossGroup.castShadow = true;
+                factoryGroup.add(crossGroup);
+            }
+
+            // Realistic rust and corrosion
+            if (currentSlide < 4) {
+                for (let j = 0; j < 10; j++) {
+                    const rustSize = Math.random() * 4 + 2;
+                    const rust = new THREE.Mesh(
+                        new THREE.BoxGeometry(rustSize, 3.2, 4.2),
+                        new THREE.MeshStandardMaterial({ 
+                            color: 0x8b4513,
+                            roughness: 1,
+                            metalness: 0.1
+                        })
+                    );
+                    rust.position.set((Math.random() - 0.5) * 180, 35, i);
+                    rust.name = "rust";
+                    factoryGroup.add(rust);
+                }
+            }
+        }
+
+        // Realistic Bird Nests
+        for (let i = 0; i < 10; i++) {
+            const nestGroup = new THREE.Group();
+            
+            // Base
+            const nestBase = new THREE.Mesh(
+                new THREE.CylinderGeometry(1.8, 2.2, 0.6, 16),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0x654321,
+                    roughness: 1
+                })
+            );
+            nestGroup.add(nestBase);
+
+            // Twigs and debris
+            for (let t = 0; t < 12; t++) {
+                const twig = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.05, 0.05, Math.random() * 2 + 1, 4),
+                    new THREE.MeshStandardMaterial({ color: 0x4a3520 })
+                );
+                twig.position.set(
+                    (Math.random() - 0.5) * 2,
+                    Math.random() * 0.5,
+                    (Math.random() - 0.5) * 2
+                );
+                twig.rotation.set(
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI
+                );
+                nestGroup.add(twig);
+            }
+
+            nestGroup.position.set(
+                (Math.random() - 0.5) * 170,
+                35.8,
+                Math.floor((Math.random() - 0.5) * 8) * 22
+            );
+            nestGroup.name = "nest";
+            factoryGroup.add(nestGroup);
+        }
+
+        // Realistic Birds
+        const birdCount = 40;
+        for(let i = 0; i < birdCount; i++) {
+            const birdGroup = new THREE.Group();
+            
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.5, 12, 12),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0x4a4a4a,
+                    roughness: 0.9
+                })
+            );
+            birdGroup.add(body);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.3, 8, 8),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0x3a3a3a,
+                    roughness: 0.9
+                })
+            );
+            head.position.set(0.4, 0.2, 0);
+            birdGroup.add(head);
+
+            // Beak
+            const beak = new THREE.Mesh(
+                new THREE.ConeGeometry(0.08, 0.2, 8),
+                new THREE.MeshStandardMaterial({ color: 0xffaa00 })
+            );
+            beak.rotation.z = -Math.PI / 2;
+            beak.position.set(0.65, 0.2, 0);
+            birdGroup.add(beak);
+            
+            const onRafter = Math.random() > 0.35;
+            if (onRafter) {
+                birdGroup.position.set(
+                    (Math.random() - 0.5) * 170,
+                    35.5,
+                    Math.floor((Math.random() - 0.5) * 8) * 22
+                );
+                birdGroup.rotation.y = Math.random() * Math.PI * 2;
+            } else {
+                birdGroup.position.set(
+                    (Math.random() - 0.5) * 130,
+                    28 + Math.random() * 12,
+                    (Math.random() - 0.5) * 130
+                );
+            }
+            
+            birdGroup.userData = { 
+                onRafter: onRafter,
+                offset: Math.random() * 10,
+                speed: 0.002 + Math.random() * 0.01,
+                amplitude: onRafter ? 0.008 : 0.025
+            };
+            birdGroup.name = "bird";
+            birdGroup.castShadow = true;
+            factoryGroup.add(birdGroup);
+        }
+
+        // Enhanced SHIELD Device
+        const shieldGroup = new THREE.Group();
+        
+        const shieldBase = new THREE.Mesh(
+            new THREE.CylinderGeometry(2.8, 3.2, 2.8, 32),
+            new THREE.MeshStandardMaterial({ 
+                color: 0x2a2a2a,
+                roughness: 0.4,
+                metalness: 0.75
+            })
+        );
+        shieldBase.castShadow = true;
+        shieldGroup.add(shieldBase);
+
+        // Green status ring
+        const shieldRing = new THREE.Mesh(
+            new THREE.TorusGeometry(2.5, 0.35, 16, 32),
+            new THREE.MeshStandardMaterial({ 
+                color: 0x22c55e,
+                emissive: 0x22c55e,
+                emissiveIntensity: 0.8,
+                roughness: 0.3,
+                metalness: 0.7
+            })
+        );
+        shieldRing.rotation.x = Math.PI / 2;
+        shieldRing.position.y = 1.7;
+        shieldGroup.add(shieldRing);
+
+        // Camera lens
+        const lens = new THREE.Mesh(
+            new THREE.SphereGeometry(1.1, 32, 32),
+            new THREE.MeshStandardMaterial({ 
+                color: 0x0a0a0a,
+                roughness: 0.1,
+                metalness: 0.9
+            })
+        );
+        lens.position.y = -1.7;
+        shieldGroup.add(lens);
+
+        // Antenna
+        const antenna = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.1, 0.1, 2, 8),
+            new THREE.MeshStandardMaterial({ 
+                color: 0x1a1a1a,
+                metalness: 0.8
+            })
+        );
+        antenna.position.y = 2.8;
+        shieldGroup.add(antenna);
+
+        shieldGroup.position.set(0, 35, 0);
+        shieldGroup.name = "shieldDevice";
+        factoryGroup.add(shieldGroup);
+
+        // Detection Zone Visualization
+        const detectionCone = new THREE.Mesh(
+            new THREE.ConeGeometry(62, 52, 64, 1, true),
+            new THREE.MeshBasicMaterial({ 
+                color: 0x22c55e,
+                transparent: true,
+                opacity: 0.06,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending
+            })
+        );
+        detectionCone.position.set(0, 9, 0);
+        detectionCone.rotation.x = Math.PI;
+        detectionCone.name = "shieldZone";
+        detectionCone.visible = false;
+        factoryGroup.add(detectionCone);
+
+        // Scanning pulse ring
+        const scanRing = new THREE.Mesh(
+            new THREE.RingGeometry(2, 68, 64),
+            new THREE.MeshBasicMaterial({ 
+                color: 0x22c55e,
+                transparent: true,
+                opacity: 0.35,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending
+            })
+        );
+        scanRing.rotation.x = -Math.PI / 2;
+        scanRing.position.y = 35;
+        scanRing.name = "scanRing";
+        scanRing.visible = false;
+        factoryGroup.add(scanRing);
+
+        scene.add(factoryGroup);
+    }
+
+    function changeSlide(dir) {
+        const card = document.getElementById('content');
+        card.classList.add('hidden');
+        
+        setTimeout(() => {
+            currentSlide = (currentSlide + dir + slides.length) % slides.length;
+            updateUI();
+            card.classList.remove('hidden');
+        }, 600);
+    }
+
+    function updateUI() {
+        const data = slides[currentSlide];
+        const card = document.getElementById('content');
+        
+        card.className = 'content-card ' + data.type;
+        
+        const slideLabel = currentSlide < 4 ? 'ISSUE' : 'SOLUTION';
+        document.getElementById('slideNumber').innerText = `${slideLabel} ${String(currentSlide + 1).padStart(2, '0')}/${String(slides.length).padStart(2, '0')}`;
+        document.getElementById('slide-title').innerText = data.title;
+        document.getElementById('slide-text').innerText = data.text;
+        
+        const progress = ((currentSlide + 1) / slides.length) * 100;
+        document.getElementById('progressBar').style.width = progress + '%';
+        
+        const problemArea = document.getElementById('problem-area');
+        if (data.problems && data.problems.length > 0) {
+            problemArea.innerHTML = `
+                <div class="problem-visual">
+                    <h4>${currentSlide < 4 ? '⚠️ CRITICAL ISSUES' : '✓ SOLUTION BENEFITS'}</h4>
+                    ${data.problems.map(p => `
+                        <div class="problem-item">
+                            <div class="problem-icon">${currentSlide < 4 ? '!' : '✓'}</div>
+                            <span>${p}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            problemArea.innerHTML = '';
+        }
+
+        const dataArea = document.getElementById('data-area');
+        dataArea.innerHTML = '';
+        data.data.forEach((item) => {
+            const pill = document.createElement('div');
+            pill.className = 'data-pill ' + item.type;
+            pill.innerHTML = `<label>${item.label}</label><span>${item.value}</span>`;
+            dataArea.appendChild(pill);
+        });
+
+        const statusMap = {
+            0: 'THREAT DETECTED',
+            1: 'HEALTH RISK ALERT',
+            2: 'DAMAGE ANALYSIS',
+            3: 'FAILURE MODE',
+            4: 'ACTIVE DEFENSE',
+            5: 'FACILITY PROTECTED'
+        };
+        document.getElementById('systemStatus').innerText = statusMap[currentSlide];
+
+        document.getElementById('nextBtn').querySelector('span').innerText = 
+            currentSlide === slides.length - 1 ? 'Restart Tour →' : 
+            currentSlide < 4 ? 'Next Issue →' : 'See Results →';
+
+        const zone = factoryGroup.getObjectByName("shieldZone");
+        const ring = factoryGroup.getObjectByName("scanRing");
+        
+        if (zone) zone.visible = (currentSlide >= 4);
+        if (ring) ring.visible = (currentSlide >= 4);
+
+        factoryGroup.children.forEach(obj => {
+            if (obj.name === "dropping" || obj.name === "nest" || obj.name === "rust") {
+                obj.visible = (currentSlide < 4);
+            }
+        });
+    }
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        const target = slides[currentSlide];
+        const time = Date.now() * 0.001;
+        
+        camera.position.x += (target.camera.x - camera.position.x) * 0.02;
+        camera.position.y += (target.camera.y - camera.position.y) * 0.02;
+        camera.position.z += (target.camera.z - camera.position.z) * 0.02;
+        
+        camera.position.x += mouseX * 0.4;
+        camera.position.y += mouseY * 0.4;
+
+        const lookAtTarget = new THREE.Vector3(target.lookAt.x, target.lookAt.y, target.lookAt.z);
+        camera.lookAt(lookAtTarget);
+
+        factoryGroup.children.forEach(obj => {
+            if (obj.name === "bird") {
+                const ud = obj.userData;
+                obj.position.y += Math.sin(time * ud.speed * 10 + ud.offset) * ud.amplitude;
+                
+                if (!ud.onRafter) {
+                    obj.position.x += Math.sin(time * ud.speed) * 0.04;
+                    obj.position.z += Math.cos(time * ud.speed) * 0.04;
+                    obj.rotation.y = Math.atan2(
+                        Math.cos(time * ud.speed),
+                        Math.sin(time * ud.speed)
+                    );
+                }
+                
+                if (currentSlide >= 4) {
+                    obj.scale.setScalar(THREE.MathUtils.lerp(obj.scale.x, 0, 0.015));
+                } else {
+                    obj.scale.setScalar(THREE.MathUtils.lerp(obj.scale.x, 1, 0.015));
+                }
+            }
+
+            if (obj.name === "heat") {
+                const pulse = Math.sin(time * 0.4 + obj.userData.offset) * 2.5 + obj.userData.baseY;
+                obj.position.y = pulse;
+                obj.scale.setScalar(Math.sin(time * 0.25 + obj.userData.offset) * 0.25 + 1);
+            }
+
+            if (obj.name === "shieldDevice") {
+                if (currentSlide >= 4) {
+                    obj.rotation.y += 0.002;
+                }
+            }
+
+            if (obj.name === "shieldZone") {
+                obj.rotation.y += 0.004;
+            }
+
+            if (obj.name === "scanRing") {
+                const scale = Math.sin(time * 1.1) * 0.5 + 1.6;
+                obj.scale.set(scale, scale, 1);
+                obj.material.opacity = 0.5 - (scale - 1.1) * 0.35;
+            }
+        });
+
+        renderer.render(scene, camera);
+    }
+</script>
+
+</body>
+</html>
